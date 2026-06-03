@@ -1,0 +1,35 @@
+@import url("https://fonts.googleapis.com/css2?family=Courier+Prime:ital,wght@0,400;0,700;1,400;1,700&family=Rock+Salt&display=swap");
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Courier Prime", monospace;
+  --font-heading: "Rock Salt", cursive;
+
+  --color-bg-deep: #050505;
+  --color-cyan: #00f0ff;
+  --color-neon-pink: #ff007f;
+  --color-neon-green: #39ff14;
+}
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 0 0% 3.9%;
+  }
+  .dark {
+    --background: 0 0% 3.9%;
+    --foreground: 0 0% 98%;
+  }
+
+  html {
+    color-scheme: dark;
+  }
+
+  body {
+    @apply bg-zinc-950 text-zinc-50 font-sans antialiased;
+  }
+
+  h1 {
+    @apply font-heading tracking-wider;
+  }
+}
