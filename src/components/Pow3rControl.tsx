@@ -1,12 +1,52 @@
-import { useState } from "react";
-import { motion } from "motion/react";
-import { MCPControlDefinition } from "../config/pageSchemas";
-import { useAppStore } from "../store/appStore";
-import {
-  buildPow3rRequest,
-  executePow3rWorkflow,
-} from "../services/unifiedSchema";
-import { toast } from "sonner";
+/**
+ * Pow3rControl — single MCP control via @pow3r/controls SSOT.
+ *
+ * Census: docs/status/SUPER_COMPONENT_INSTANCE_CENSUS.md §6
+ * Package: pow3r.config/packages/controls
+ *
+ * Keeps Looper UPDATE_PARAMETER / toast side effects; UI renders through Pow3rControls.
+ */
+
+import { useCallback, useMemo, useState } from 'react';
+import { Pow3rControls, type ConfigControlsMap, type ControlSpec } from '@pow3r/controls';
+import { MCPControlDefinition } from '../config/pageSchemas';
+import { useAppStore } from '../store/appStore';
+import { buildPow3rRequest, executePow3rWorkflow } from '../services/unifiedSchema';
+import { toast } from 'sonner';
+
+/* pow3r-config-ui-binding */
+import { useConfig, config_controls, componentConfig } from '../config/pow3rConfig';
+// Agent Note: Unbound UI — stamp config_controls.base_url on the document for this surface.
+if (
+  typeof document !== 'undefined' &&
+  config_controls &&
+  typeof config_controls === 'object' &&
+  'base_url' in config_controls
+) {
+  document.documentElement.dataset.pow3rConfigBase = String(
+    (config_controls as { base_url?: string }).base_url || '',
+  );
+}
+void useConfig;
+void componentConfig;
+
+function toControlSpec(control: MCPControlDefinition): ControlSpec {
+  const type =
+    control.type === 'select'
+      ? 'segmented'
+      : control.type === 'button'
+        ? 'switch'
+        : control.type;
+  return {
+    type,
+    label: control.label,
+    min: control.min,
+    max: control.max,
+    step: control.step,
+    default: control.defaultValue,
+    options: control.options,
+  };
+}
 
 export default function Pow3rControl({
   control,
@@ -14,87 +54,49 @@ export default function Pow3rControl({
   control: MCPControlDefinition;
   key?: string | number;
 }) {
-  const [val, setVal] = useState(control.defaultValue);
   const appendLogs = useAppStore((state) => state.appendLogsFromPayload);
+  const configControls = useMemo<ConfigControlsMap>(
+    () => ({ [control.id]: toControlSpec(control) }),
+    [control],
+  );
+  const [values, setValues] = useState<Record<string, unknown>>(() => ({
+    [control.id]: control.defaultValue,
+  }));
 
-  // General handler to run unified schema requests for every parameter update
-  const handleUpdate = async (newVal: any) => {
-    setVal(newVal);
+  const handleValuesChange = useCallback(
+    async (next: Record<string, unknown>) => {
+      const newVal = next[control.id];
+      setValues(next);
 
-    const request = buildPow3rRequest("UPDATE_PARAMETER", {
-      componentId: control.id,
-      newValue: newVal,
-    });
+      const request = buildPow3rRequest('UPDATE_PARAMETER', {
+        componentId: control.id,
+        newValue: newVal,
+      });
 
-    // Mock orchestration of parameter to MCP Tool Call
-    const response = await executePow3rWorkflow(request, async () => {
-      // In a real app, this waits for edge response.
-      await new Promise((r) => setTimeout(r, 150));
-      return { parameter: control.id, updatedTo: newVal };
-    });
+      const response = await executePow3rWorkflow(request, async () => {
+        await new Promise((r) => setTimeout(r, 150));
+        return { parameter: control.id, updatedTo: newVal };
+      });
 
-    appendLogs(response);
-    toast.success(`Parameter Updated`, { description: `${control.label} set to ${newVal}` });
-  };
+      appendLogs(response);
+      toast.success('Parameter Updated', {
+        description: `${control.label} set to ${newVal}`,
+      });
+    },
+    [appendLogs, control.id, control.label],
+  );
 
-  switch (control.type) {
-    case "slider":
-      return (
-        <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-xl shadow-lg relative overflow-hidden group">
-          <div className="flex justify-between items-center mb-2">
-            <span className="text-zinc-300 font-sans text-xs font-bold">
-              {control.label}
-            </span>
-            <span className="text-cyan-500 font-mono text-[10px]">{val}</span>
-          </div>
-          <input
-            type="range"
-            min={control.min}
-            max={control.max}
-            step={control.step || 1}
-            value={val}
-            onChange={(e) => handleUpdate(Number(e.target.value))}
-            className="w-full accent-cyan-500 h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer relative z-10"
-          />
-        </div>
-      );
-    case "switch":
-      return (
-        <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-xl shadow-lg flex justify-between items-center group">
-          <span className="text-zinc-300 font-sans text-xs font-bold">
-            {control.label}
-          </span>
-          <button
-            onClick={() => handleUpdate(!val)}
-            className={`w-10 h-5 rounded-full relative transition-colors ${val ? "bg-cyan-500" : "bg-zinc-800"}`}
-          >
-            <motion.div
-              animate={{ x: val ? 20 : 2 }}
-              className="w-4 h-4 bg-white rounded-full absolute top-0.5 shadow-sm"
-            />
-          </button>
-        </div>
-      );
-    case "select":
-      return (
-        <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-xl shadow-lg flex flex-col gap-2">
-          <span className="text-zinc-300 font-sans text-xs font-bold">
-            {control.label}
-          </span>
-          <select
-            value={val}
-            onChange={(e) => handleUpdate(e.target.value)}
-            className="bg-zinc-950 border border-zinc-800 text-xs font-mono text-cyan-400 p-2 rounded outline-none focus:border-cyan-500"
-          >
-            {control.options?.map((opt) => (
-              <option key={opt} value={opt}>
-                {opt}
-              </option>
-            ))}
-          </select>
-        </div>
-      );
-    default:
-      return null;
-  }
+  return (
+    <div
+      className="bg-zinc-900 border border-zinc-800 p-4 rounded-xl shadow-lg"
+      data-testid={`pow3r-control-${control.id}`}
+    >
+      <Pow3rControls
+        configControls={configControls}
+        values={values}
+        onValuesChange={handleValuesChange}
+        className="space-y-2"
+      />
+    </div>
+  );
 }

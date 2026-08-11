@@ -12,6 +12,15 @@ import {
   ChevronLeft,
 } from "lucide-react";
 
+/* pow3r-config-ui-binding */
+import { useConfig, config_controls, componentConfig } from '../config/pow3rConfig';
+// Agent Note: Unbound UI — stamp config_controls.base_url on the document for this surface.
+if (typeof document !== 'undefined' && config_controls && typeof config_controls === 'object' && 'base_url' in config_controls) {
+  document.documentElement.dataset.pow3rConfigBase = String((config_controls as { base_url?: string }).base_url || '');
+}
+void useConfig;
+void componentConfig;
+
 export default function SchemaSidebar({ inline = false }: { inline?: boolean }) {
   const getAdapterJSON = useWorkflowStore((state) => state.getAdapterJSON);
   const viewMode = useWorkflowStore((state) => state.viewMode);
